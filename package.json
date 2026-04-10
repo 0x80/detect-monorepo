@@ -1,6 +1,6 @@
 {
   "name": "detect-monorepo",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Detect whether a directory sits inside a JS/TS monorepo workspace (pnpm, npm/yarn/bun workspaces, or rush).",
   "keywords": [
     "bun",
