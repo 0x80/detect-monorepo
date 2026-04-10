@@ -1,0 +1,23 @@
+# dependencies
+/node_modules
+/dist
+*.tsbuildinfo
+
+*.log
+
+# testing
+coverage
+
+# misc
+.DS_Store
+*.pem
+
+# local env files
+.env
+.env.*
+
+.vscode
+
+# vitepress
+docs/.vitepress/cache
+docs/.vitepress/dist
