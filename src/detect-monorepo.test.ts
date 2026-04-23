@@ -111,7 +111,7 @@ describe("detectMonorepo", () => {
     });
   });
 
-  it("stops searching after MAX_DEPTH (4) levels", () => {
+  it("stops searching after the default max depth (4) levels", () => {
     fs.writeFileSync(
       path.join(tmpRoot, "pnpm-workspace.yaml"),
       "packages:\n  - 'apps/*/functions/src'\n",
@@ -124,7 +124,7 @@ describe("detectMonorepo", () => {
     expect(result).toBeNull();
   });
 
-  it("finds a marker exactly at MAX_DEPTH (3 levels up)", () => {
+  it("finds a marker exactly at the default max depth (3 levels up)", () => {
     fs.writeFileSync(
       path.join(tmpRoot, "pnpm-workspace.yaml"),
       "packages:\n  - 'apps/*/functions'\n",
@@ -185,6 +185,49 @@ describe("detectMonorepo", () => {
     const result = detectMonorepo(tmpRoot);
 
     expect(result).toBeNull();
+  });
+
+  it("respects a custom finite maxDepth that is smaller than the default", () => {
+    fs.writeFileSync(
+      path.join(tmpRoot, "pnpm-workspace.yaml"),
+      "packages:\n  - 'packages/*'\n",
+    );
+    const twoUp = path.join(tmpRoot, "packages", "api");
+    fs.mkdirSync(twoUp, { recursive: true });
+
+    expect(detectMonorepo(twoUp, { maxDepth: 3 })).toEqual({
+      rootDir: tmpRoot,
+      kind: "pnpm",
+    });
+    expect(detectMonorepo(twoUp, { maxDepth: 2 })).toBeNull();
+  });
+
+  it("walks to the filesystem root when maxDepth is Infinity", () => {
+    fs.writeFileSync(
+      path.join(tmpRoot, "pnpm-workspace.yaml"),
+      "packages:\n  - 'a/b/c/d/e/f'\n",
+    );
+    const veryDeep = path.join(tmpRoot, "a", "b", "c", "d", "e", "f");
+    fs.mkdirSync(veryDeep, { recursive: true });
+
+    expect(detectMonorepo(veryDeep)).toBeNull();
+    expect(detectMonorepo(veryDeep, { maxDepth: Infinity })).toEqual({
+      rootDir: tmpRoot,
+      kind: "pnpm",
+    });
+  });
+
+  it.each([
+    ["zero", 0],
+    ["negative", -1],
+    ["non-integer", 1.5],
+    ["NaN", Number.NaN],
+    ["negative infinity", Number.NEGATIVE_INFINITY],
+    ["string", "4" as unknown as number],
+  ])("throws TypeError when maxDepth is %s", (_label, value) => {
+    expect(() => detectMonorepo(tmpRoot, { maxDepth: value })).toThrow(
+      TypeError,
+    );
   });
 
   it("does not match a package.json without a workspaces field", () => {
