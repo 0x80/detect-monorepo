@@ -54,9 +54,13 @@ type MonorepoInfo = {
 
 ## Behaviour
 
-- Walks upward from `startDir` (default: `process.cwd()`) up to four levels
-  (the start directory plus three parents), stopping at the filesystem root
-  if reached earlier.
+- Walks upward from `startDir` (default: `process.cwd()`) until a workspace
+  marker is found, a directory containing a VCS-root marker (`.git`, `.hg`,
+  or `.svn`) is reached, or the filesystem root is reached. The
+  VCS-bearing directory is itself checked for workspace markers before
+  traversal stops, so a workspace root and a repo root may coincide. The
+  VCS boundary prevents the walk from straying outside the project
+  repository into unrelated workspace markers higher up the filesystem.
 - Returns the first match found while walking upward.
 - A `package.json` that cannot be parsed, or one whose `workspaces` field
   isn't an array or a `{ packages: string[] }` object, is treated as "no
