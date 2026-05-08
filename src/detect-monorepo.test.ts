@@ -9,6 +9,11 @@ describe("detectMonorepo", () => {
 
   beforeEach(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "detect-monorepo-"));
+    /**
+     * Seed a `.git` boundary at the temp root so the walk can't escape the
+     * fixture into the host filesystem during tests that expect null.
+     */
+    fs.mkdirSync(path.join(tmpRoot, ".git"));
   });
 
   afterEach(() => {
@@ -111,25 +116,88 @@ describe("detectMonorepo", () => {
     });
   });
 
-  it("stops searching after MAX_DEPTH (4) levels", () => {
+  it("stops at a .git repo boundary", () => {
+    /**
+     * Workspace marker sits *above* an inner directory that has its own
+     * `.git`. The walk starts deep inside the inner repo and must stop at
+     * the inner `.git` before reaching the outer workspace marker.
+     */
     fs.writeFileSync(
       path.join(tmpRoot, "pnpm-workspace.yaml"),
-      "packages:\n  - 'apps/*/functions/src'\n",
+      "packages:\n  - 'inner/*'\n",
     );
-    const tooDeep = path.join(tmpRoot, "apps", "firebase", "functions", "src");
-    fs.mkdirSync(tooDeep, { recursive: true });
+    const inner = path.join(tmpRoot, "inner");
+    fs.mkdirSync(path.join(inner, ".git"), { recursive: true });
+    const nested = path.join(inner, "a", "b");
+    fs.mkdirSync(nested, { recursive: true });
 
-    const result = detectMonorepo(tooDeep);
+    const result = detectMonorepo(nested);
 
     expect(result).toBeNull();
   });
 
-  it("finds a marker exactly at MAX_DEPTH (3 levels up)", () => {
+  it("stops at a .hg repo boundary", () => {
     fs.writeFileSync(
       path.join(tmpRoot, "pnpm-workspace.yaml"),
-      "packages:\n  - 'apps/*/functions'\n",
+      "packages:\n  - 'inner/*'\n",
     );
-    const deep = path.join(tmpRoot, "apps", "firebase", "functions");
+    const inner = path.join(tmpRoot, "inner");
+    fs.mkdirSync(path.join(inner, ".hg"), { recursive: true });
+    const nested = path.join(inner, "a", "b");
+    fs.mkdirSync(nested, { recursive: true });
+
+    const result = detectMonorepo(nested);
+
+    expect(result).toBeNull();
+  });
+
+  it("stops at a .svn repo boundary", () => {
+    fs.writeFileSync(
+      path.join(tmpRoot, "pnpm-workspace.yaml"),
+      "packages:\n  - 'inner/*'\n",
+    );
+    const inner = path.join(tmpRoot, "inner");
+    fs.mkdirSync(path.join(inner, ".svn"), { recursive: true });
+    const nested = path.join(inner, "a", "b");
+    fs.mkdirSync(nested, { recursive: true });
+
+    const result = detectMonorepo(nested);
+
+    expect(result).toBeNull();
+  });
+
+  it("finds a marker at the VCS repo root", () => {
+    /**
+     * The VCS-bearing directory itself is checked for workspace markers
+     * before traversal stops, so a workspace root and a repo root may
+     * coincide. (The seeded `.git` at tmpRoot from beforeEach plays the
+     * role of the VCS root here.)
+     */
+    fs.writeFileSync(
+      path.join(tmpRoot, "pnpm-workspace.yaml"),
+      "packages:\n  - 'apps/*'\n",
+    );
+    const deep = path.join(tmpRoot, "apps", "firebase", "functions", "src");
+    fs.mkdirSync(deep, { recursive: true });
+
+    const result = detectMonorepo(deep);
+
+    expect(result).toEqual({
+      rootDir: tmpRoot,
+      kind: "pnpm",
+    });
+  });
+
+  it("walks more than four levels inside a single VCS repo", () => {
+    /**
+     * Confirms the old depth cap is gone: a workspace marker six levels
+     * above startDir (within the same VCS repo) is still found.
+     */
+    fs.writeFileSync(
+      path.join(tmpRoot, "pnpm-workspace.yaml"),
+      "packages:\n  - 'a/*'\n",
+    );
+    const deep = path.join(tmpRoot, "a", "b", "c", "d", "e", "f");
     fs.mkdirSync(deep, { recursive: true });
 
     const result = detectMonorepo(deep);

@@ -8,12 +8,19 @@ export type MonorepoInfo = {
   kind: "pnpm" | "workspaces" | "rush";
 };
 
-const MAX_DEPTH = 4;
+/**
+ * Markers that indicate a version-control working-copy root. We never walk
+ * above one of these — workspace markers above the VCS boundary are not
+ * legitimately part of the project.
+ */
+const VCS_MARKERS = [".git", ".hg", ".svn"];
 
 /**
  * Walk upward from `startDir` looking for a monorepo workspace root. Returns
- * null if none is found within `MAX_DEPTH` levels (startDir itself plus three
- * parents) or before reaching the filesystem root.
+ * null if no marker is found before a VCS-root boundary (`.git`, `.hg`, or
+ * `.svn`) or the filesystem root is reached. The VCS-bearing directory is
+ * itself checked for workspace markers before traversal stops, so a
+ * workspace root and a repo root may coincide.
  *
  * Supported markers:
  * - `pnpm-workspace.yaml`
@@ -24,7 +31,7 @@ export function detectMonorepo(
   startDir: string = process.cwd(),
 ): MonorepoInfo | null {
   let current = path.resolve(startDir);
-  for (let i = 0; i < MAX_DEPTH; i++) {
+  while (true) {
     if (fs.existsSync(path.join(current, "pnpm-workspace.yaml"))) {
       return { rootDir: current, kind: "pnpm" };
     }
@@ -44,11 +51,13 @@ export function detectMonorepo(
         /** Malformed or unreadable package.json — ignore and continue upward. */
       }
     }
+    if (VCS_MARKERS.some((m) => fs.existsSync(path.join(current, m)))) {
+      return null;
+    }
     const parent = path.dirname(current);
     if (parent === current) return null;
     current = parent;
   }
-  return null;
 }
 
 /**
